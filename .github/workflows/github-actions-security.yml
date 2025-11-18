@@ -6,15 +6,15 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: read
-  security-events: write # Para subir SARIF
-  issues: write # Para crear issues automáticas (opcional)
-  pull-requests: write # Para comentar en PRs
-
 jobs:
   zap-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # Para subir SARIF
+      issues: write # Para issues automáticas
+      pull-requests: write # Para comentarios en PRs
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,30 +26,55 @@ jobs:
         run: ./scripts/security_health_check.sh example.com
 
       - name: OWASP ZAP Baseline Scan
+        id: zap-scan # ← ID para referenciar outputs
         uses: zaproxy/action-baseline@v0.13.0
         with:
           target: https://example.com
-          artifact_name: zap-scan
-          fail_action: false # ← Nunca falla por warnings
-          allow_issue_writing: true # ← Permite crear issues (opcional)
-          # Soluciona el error de permisos del yaml interno
-          cmd_options: "-config global.excludeFromContext.regex=.*logout.*"
+          artifact_name: zap-scan-results # Nombre del ZIP descargable
+          fail_action: false # Nunca falla por warnings
+          allow_issue_writing: true # Crea issues automáticas
+          cmd_options: >- # Genera JSON explícitamente
+            -J zap_report.json
+            -r zap_report.html
+            -w zap_report.md
+            --config baseline.threshold=Medium  # Opcional: falla solo por Medium/High
 
-      # ZAP genera los reportes en el directorio raíz del workspace
-      - name: Subir reporte HTML
+      - name: Subir artifact completo (ZIP con todos los reportes)
         uses: actions/upload-artifact@v4
         with:
-          name: zap-report-html
-          path: report_html.html
+          name: zap-full-scan
+          path: ${{ steps.zap-scan.outputs.report-path }} # Ruta automática del ZIP
 
-      - name: Subir reporte Markdown
-        uses: actions/upload-artifact@v4
-        with:
-          name: zap-report-md
-          path: report_md.md
+      # SARIF: Convertir JSON de ZAP a SARIF básico con jq
+      - name: Generar SARIF desde reporte ZAP
+        if: always()
+        run: |
+          # Instalar jq si no existe (rápido)
+          sudo apt-get update -qq && sudo apt-get install -y jq
 
-      # SARIF para GitHub Code Scanning (Security tab)
+          # Crear SARIF básico (compatible con GitHub)
+          cat > zap_report.sarif << EOF
+          {
+            "\$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif/sarif-2.1.0-rtm.5.json",
+            "version": "2.1.0",
+            "runs": [{
+              "tool": {
+                "driver": {
+                  "name": "OWASP ZAP",
+                  "version": "latest"
+                }
+              },
+              "results": $(jq -c '[.site[]? | .alerts[]? | select(.riskcode >= 1) | { ruleId: .pluginId, message: { text: (.name + ": " + (.description | tostring)), fullMessage: .solution }, level: (if .riskcode == 3 then "error" elif .riskcode == 2 then "warning" else "note" end) } ]' zap_report.json || echo '[]')
+            }]
+          }
+          EOF
+
+          # Validar y mostrar
+          jq . zap_report.sarif
+        continue-on-error: true # Si no hay alertas, no rompe
+
       - name: Subir SARIF a GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4 # ← Actualizado a v4 (no más warning)
+        if: always()
         with:
-          sarif_file: report_json.json # la acción genera este archivo compatible con SARIF
+          sarif_file: zap_report.sarif
