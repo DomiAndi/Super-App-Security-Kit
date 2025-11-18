@@ -33,10 +33,10 @@ jobs:
           artifact_name: zap-scan-results
           fail_action: false # Nunca falla por warnings
           allow_issue_writing: true # Crea issues si hay alertas nuevas
-          cmd_options: >- # ← CORREGIDO: todo en una línea válida
+          cmd_options: >-
             -J zap_report.json -r zap_report.html -w zap_report.md
             -z "-config baseline.threshold=Medium"
-            -I                            # Ignora warnings para exit code
+            -I
 
       - name: Subir reportes individuales
         uses: actions/upload-artifact@v4
@@ -47,31 +47,49 @@ jobs:
             zap_report.html
             zap_report.md
 
-      # SARIF: Convertir JSON de ZAP a SARIF con jq (aparece en Security tab)
+      # SARIF: Convertir JSON de ZAP a SARIF y subirlo a GitHub
       - name: Generar y subir SARIF
         if: always()
         run: |
-          # Instalar jq (rápido)
+          # Instalar jq
           sudo apt-get update -qq && sudo apt-get install -y jq
 
-          # Crear SARIF básico solo con alertas Medium/High (riskcode >=2)
-          jq -n \
-            --argjson alerts '$(jq -c '[.site[]? | .alerts[]? | select(.riskcode >= 2) | { ruleId: .pluginId, message: { text: (.name // "Unknown") + ": " + (.description // ""), fullMessage: .solution // "" }, level: (if .riskcode == 3 then "error" else "warning" end), locations: [{ physicalLocation: { artifactLocation: { uri: (.url // "") } } }] } ]' zap_report.json || echo "[]")' \
-            '{
-              "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif/sarif-2.1.0-rtm.5.json",
-              "version": "2.1.0",
-              "runs": [{
-                "tool": { "driver": { "name": "OWASP ZAP", "version": "stable" } },
-                "results": $alerts
-              }]
-            }' > zap_report.sarif
+          # Verificar que el JSON de ZAP exista
+          if [ ! -f zap_report.json ]; then
+            echo "No se encontró zap_report.json, no se generará SARIF."
+            touch zap_report.sarif
+            exit 0
+          fi
 
-          # Validar
-          jq . zap_report.sarif || echo "SARIF generado (vacío si no hay alertas)"
+          # Generar SARIF solo con alertas Medium/High (riskcode >=2)
+          alerts=$(jq -c '[.site[]? | .alerts[]? | select(.riskcode >= 2) | {
+            ruleId: .pluginId,
+            message: { text: (.name // "Unknown") + ": " + (.description // ""), fullMessage: .solution // "" },
+            level: (if .riskcode == 3 then "error" else "warning" end),
+            locations: [{ physicalLocation: { artifactLocation: { uri: (.url // "") } } }]
+          }]' zap_report.json || echo "[]")
+
+          jq -n --argjson alerts "$alerts" '{
+            "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif/sarif-2.1.0-rtm.5.json",
+            "version": "2.1.0",
+            "runs": [{
+              "tool": { "driver": { "name": "OWASP ZAP", "version": "stable" } },
+              "results": $alerts
+            }]
+          }' > zap_report.sarif
+
+          # Verificar que se generó correctamente
+          if [ -f zap_report.sarif ]; then
+            echo "SARIF generado correctamente:"
+            ls -l zap_report.sarif
+            jq . zap_report.sarif || echo "SARIF generado (puede estar vacío si no hay alertas)"
+          else
+            echo "Error: No se generó zap_report.sarif"
+          fi
         continue-on-error: true
 
       - name: Subir SARIF a GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v4 # ← v4: sin warning de deprecación
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: zap_report.sarif
