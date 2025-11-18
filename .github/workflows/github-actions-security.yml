@@ -6,15 +6,17 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  security-events: write # Para subir SARIF
+  issues: write # Para crear issues automáticas (opcional)
+  pull-requests: write # Para comentar en PRs
+
 jobs:
   zap-scan:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write # Necesario para subir SARIF (opcional pero recomendado)
-
     steps:
-      - name: Checkout código
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Dar permisos a scripts
@@ -23,40 +25,31 @@ jobs:
       - name: Security Health Check
         run: ./scripts/security_health_check.sh example.com
 
-      - name: Crear carpeta de reportes
-        run: mkdir -p reports
-
       - name: OWASP ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.13.0 # ← Opción más limpia y mantenida
+        uses: zaproxy/action-baseline@v0.13.0
         with:
           target: https://example.com
-          artifact_name: zap-report
+          artifact_name: zap-scan
           fail_action: false # ← Nunca falla por warnings
-          # Opcional: solo falla si hay alertas High/Medium
-          # rules_file: rules.tsv                # si quieres ignorar falsas alertas
+          allow_issue_writing: true # ← Permite crear issues (opcional)
+          # Soluciona el error de permisos del yaml interno
+          cmd_options: "-config global.excludeFromContext.regex=.*logout.*"
 
-      # Alternativa con docker (si prefieres seguir usando tu forma):
-      # - name: OWASP ZAP Baseline Scan (docker)
-      #   run: |
-      #     docker run --rm \
-      #       -v ${{ github.workspace }}/reports:/zap/wrk \
-      #       ghcr.io/zaproxy/zaproxy:stable \
-      #       zap-baseline.py \
-      #       -t https://example.com \
-      #       -r zap_report.html \
-      #       -I -w -x zap_report.xml \
-      #       --config baseline.failOnWarning=false \
-      #       --config baseline.threshold=Medium
-
+      # ZAP genera los reportes en el directorio raíz del workspace
       - name: Subir reporte HTML
         uses: actions/upload-artifact@v4
         with:
           name: zap-report-html
-          path: reports/zap_report.html
+          path: report_html.html
 
-      # Opcional pero muy recomendado: subir SARIF para GitHub Code Scanning
-      - name: Subir resultados SARIF a GitHub
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+      - name: Subir reporte Markdown
+        uses: actions/upload-artifact@v4
         with:
-          sarif_file: reports/zap_report.xml
+          name: zap-report-md
+          path: report_md.md
+
+      # SARIF para GitHub Code Scanning (Security tab)
+      - name: Subir SARIF a GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: report_json.json # la acción genera este archivo compatible con SARIF
