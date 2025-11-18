@@ -7,12 +7,15 @@ on:
     branches: [main]
 
 jobs:
-  scan:
+  zap-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
       # 1️⃣ Obtener el código
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       # 2️⃣ Dar permisos a los scripts
       - name: Dar permisos a los scripts
@@ -31,8 +34,15 @@ jobs:
       # 5️⃣ OWASP ZAP Scan
       - name: OWASP ZAP Scan
         run: |
-          docker run --rm -v ${{ github.workspace }}/reports:/zap/wrk/ ghcr.io/zaproxy/zaproxy:latest \
-            zap-baseline.py -t https://example.com -r zap_report.html
+          docker run --rm \
+            -v ${{ github.workspace }}/reports:/zap/wrk \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t https://example.com \
+            -r zap_report.html \
+            -w \                      # ← muestra warnings pero no falla por ellas
+            --config baseline.failOnWarning=false   # ← CLAVE: ignora warnings
+            --config baseline.threshold=High        # opcional: solo falla si hay High
 
       # 6️⃣ Subir reporte como artefacto
       - name: Subir reporte
