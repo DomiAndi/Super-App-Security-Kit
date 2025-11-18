@@ -1,0 +1,13 @@
+name: Security Scan
+
+on: [push]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install semgrep
+        run: pip install semgrep
+      - name: SAST Scan
+        run: semgrep --config=auto
