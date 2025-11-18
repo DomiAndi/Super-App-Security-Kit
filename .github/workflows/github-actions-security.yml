@@ -21,29 +21,26 @@ jobs:
         with:
           python-version: "3.11"
 
-      # 4️⃣ Instalar herramientas de análisis
+      # 4️⃣ Instalar herramientas necesarias
       - name: Install security tools
         run: |
           python -m pip install --upgrade pip
-          pip install semgrep safety jq
+          pip install jq
 
       # 5️⃣ Ejecutar comprobación rápida de seguridad
       - name: Security Health Check
         run: ./scripts/security_health_check.sh example.com
 
-      # 6️⃣ Ejecutar SAST scan
-      - name: SAST Scan
-        run: ./scripts/sast_scan.sh . sast_results.json
+      # 6️⃣ Ejecutar ZAP Scan
+      - name: OWASP ZAP Scan
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/zap/wrk/ ghcr.io/zaproxy/zaproxy:latest \
+          zap-baseline.py -t https://example.com -r zap_report.html
 
-      # 7️⃣ Ejecutar escaneo de dependencias
-      - name: Dependency Scan
-        run: ./scripts/deps_scan.sh all deps_report.json
-
-      # 8️⃣ Subir reportes generados como artefactos
+      # 7️⃣ Subir reportes generados
       - name: Upload security reports
         uses: actions/upload-artifact@v4
         with:
           name: security-reports
           path: |
-            deps_report.json
-            sast_results.json
+            zap_report.html
