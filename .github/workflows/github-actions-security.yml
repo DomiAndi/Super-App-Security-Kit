@@ -1,46 +1,42 @@
 name: Security Scan
 
-on: [push]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   scan:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Hacer checkout del repositorio
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      # 1️⃣ Obtener el código
+      - uses: actions/checkout@v3
 
-      # 2️⃣ Dar permisos de ejecución a los scripts
+      # 2️⃣ Dar permisos a los scripts
       - name: Dar permisos a los scripts
         run: chmod +x ./scripts/*.sh
 
-      # 3️⃣ Configurar Python
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
-
-      # 4️⃣ Instalar herramientas necesarias
-      - name: Install security tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install jq
-
-      # 5️⃣ Ejecutar comprobación rápida de seguridad
+      # 3️⃣ Ejecutar health check
       - name: Security Health Check
         run: ./scripts/security_health_check.sh example.com
 
-      # 6️⃣ Ejecutar ZAP Scan
+      # 4️⃣ Preparar carpeta para ZAP
+      - name: Crear carpeta de reportes
+        run: |
+          mkdir -p ${{ github.workspace }}/reports
+          chmod 777 ${{ github.workspace }}/reports
+
+      # 5️⃣ OWASP ZAP Scan
       - name: OWASP ZAP Scan
         run: |
-          docker run --rm -v ${{ github.workspace }}:/zap/wrk/ ghcr.io/zaproxy/zaproxy:latest \
-          zap-baseline.py -t https://example.com -r zap_report.html
+          docker run --rm -v ${{ github.workspace }}/reports:/zap/wrk/ ghcr.io/zaproxy/zaproxy:latest \
+            zap-baseline.py -t https://example.com -r zap_report.html
 
-      # 7️⃣ Subir reportes generados
-      - name: Upload security reports
+      # 6️⃣ Subir reporte como artefacto
+      - name: Subir reporte
         uses: actions/upload-artifact@v4
         with:
-          name: security-reports
-          path: |
-            zap_report.html
+          name: zap-report
+          path: ${{ github.workspace }}/reports/zap_report.html
