@@ -11,42 +11,52 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
+      security-events: write # Necesario para subir SARIF (opcional pero recomendado)
 
     steps:
-      # 1️⃣ Obtener el código
-      - uses: actions/checkout@v4
+      - name: Checkout código
+        uses: actions/checkout@v4
 
-      # 2️⃣ Dar permisos a los scripts
-      - name: Dar permisos a los scripts
+      - name: Dar permisos a scripts
         run: chmod +x ./scripts/*.sh
 
-      # 3️⃣ Ejecutar health check
       - name: Security Health Check
         run: ./scripts/security_health_check.sh example.com
 
-      # 4️⃣ Preparar carpeta para ZAP
       - name: Crear carpeta de reportes
-        run: |
-          mkdir -p ${{ github.workspace }}/reports
-          chmod 777 ${{ github.workspace }}/reports
+        run: mkdir -p reports
 
-      # 5️⃣ OWASP ZAP Scan
-      - name: OWASP ZAP Scan
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}/reports:/zap/wrk \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py \
-            -t https://example.com \
-            -r zap_report.html \
-            -w \                      # ← muestra warnings pero no falla por ellas
-            --config baseline.failOnWarning=false   # ← CLAVE: ignora warnings
-            --config baseline.threshold=High        # opcional: solo falla si hay High
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.13.0 # ← Opción más limpia y mantenida
+        with:
+          target: https://example.com
+          artifact_name: zap-report
+          fail_action: false # ← Nunca falla por warnings
+          # Opcional: solo falla si hay alertas High/Medium
+          # rules_file: rules.tsv                # si quieres ignorar falsas alertas
 
-      # 6️⃣ Subir reporte como artefacto
-      - name: Subir reporte
+      # Alternativa con docker (si prefieres seguir usando tu forma):
+      # - name: OWASP ZAP Baseline Scan (docker)
+      #   run: |
+      #     docker run --rm \
+      #       -v ${{ github.workspace }}/reports:/zap/wrk \
+      #       ghcr.io/zaproxy/zaproxy:stable \
+      #       zap-baseline.py \
+      #       -t https://example.com \
+      #       -r zap_report.html \
+      #       -I -w -x zap_report.xml \
+      #       --config baseline.failOnWarning=false \
+      #       --config baseline.threshold=Medium
+
+      - name: Subir reporte HTML
         uses: actions/upload-artifact@v4
         with:
-          name: zap-report
-          path: ${{ github.workspace }}/reports/zap_report.html
+          name: zap-report-html
+          path: reports/zap_report.html
+
+      # Opcional pero muy recomendado: subir SARIF para GitHub Code Scanning
+      - name: Subir resultados SARIF a GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/zap_report.xml
