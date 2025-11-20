@@ -80,7 +80,7 @@ jobs:
           path: zap_reports/
 
       # ---------------------------
-      # GENERAR SARIF DESDE ZAP
+      # GENERAR SARIF DESDE ZAP (Corregido)
       # ---------------------------
       - name: Generar SARIF desde ZAP
         if: always()
@@ -118,7 +118,10 @@ jobs:
               end;
 
             (.site // .) as $root |
-            ($root | type == "array") ? if . then .[] else $root end |
+            
+            # **CORRECCIÓN DE SINTAXIS DE JQ**
+            if ($root | type == "array") then $root[] else $root end |
+            
             .alerts[]? // .site[].alerts[]? // empty |
             select(.riskcode >= 2) |
             {
