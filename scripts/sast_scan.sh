@@ -1,5 +1,9 @@
 #!/bin/bash
 
+echo -e "\nSuper App Security Kit - Análisis DAST (OWASP ZAP)"
+echo "Objetivo: $1"
+echo "════════════════════════════════════════════════\n"
+
 DIRECTORIO_ESCANEO="."
 OUTPUT_FILE="semgrep_report.json"
 

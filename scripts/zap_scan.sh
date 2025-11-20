@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+echo -e "\nSuper App Security Kit - Análisis SAST (Semgrep)"
+echo "════════════════════════════════════════════════\n"
 set -euo pipefail
 
 # 1) Parámetros

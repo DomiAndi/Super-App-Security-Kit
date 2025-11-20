@@ -1,10 +1,17 @@
 name: Security Scan
 
+# Super App Security Kit - Pipeline DevSecOps
+# Incluye: Health Check + SAST (Semgrep) + DAST (OWASP ZAP) + GitHub Code Scanning
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+env:
+  TARGET_URL: ${{ vars.TARGET_URL || 'https://example.com' }}
 
 jobs:
   security-scan:
@@ -16,7 +23,7 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Dar permisos a scripts
@@ -26,7 +33,7 @@ jobs:
       # HEALTH CHECK
       # ---------------------------
       - name: Security Health Check
-        run: ./scripts/security_health_check.sh example.com
+        run: ./scripts/security_health_check.sh $(echo "${{ env.TARGET_URL }}" | awk -F[/:] '{print $4}' || echo "example.com")
 
       # ---------------------------
       # SAST – SEMGREP
@@ -46,7 +53,7 @@ jobs:
       # ---------------------------
       # DAST – OWASP ZAP con SARIF nativo
       # ---------------------------
-      - name: OWASP ZAP Baseline Scan + SARIF
+      - name: OWASP ZAP Baseline Scan
         run: |
           mkdir -p zap_wrk reports
 
@@ -54,24 +61,54 @@ jobs:
             -v $(pwd)/zap_wrk:/zap/wrk/:rw \
             -t ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
-            -t https://example.com \
+            -t ${{ env.TARGET_URL }} \
             -J zap_report.json \
             -w zap_report.md \
             -r zap_report.html \
             -z "-config baseline.threshold=Medium" \
             -I || true
 
-          # ←←← AQUÍ ESTÁ LA MAGIA (3 líneas y listo)
-          docker run --rm \
-            -v $(pwd)/zap_wrk:/zap/wrk/:rw \
-            -v $(pwd)/reports:/reports:rw \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-api-scan.py -f openapi -t /zap/wrk/zap_report.json -w /reports/zap_scan.sarif || true
+      - name: Generar SARIF válido desde ZAP (tu código original, solo con ruta corregida)
+        if: always()
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y jq
+          mkdir -p reports
+          JSON_FILE="zap_wrk/zap_report.json"
+          SARIF_FILE="reports/zap_scan.sarif"
 
-          # Si por algún motivo falla la conversión, SARIF vacío
-          [ -f reports/zap_scan.sarif ] || cat > reports/zap_scan.sarif <<'EOF'
-          {"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"OWASP ZAP"}},"results":[]}]}
+          if [ ! -f "$JSON_FILE" ] || [ ! -s "$JSON_FILE" ]; then
+            echo "Creando SARIF vacío"
+            cat > "$SARIF_FILE" <<'EOF'
+          {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [{ "tool": { "driver": { "name": "OWASP ZAP" }}, "results": [] }]
+          }
           EOF
+          else
+            # Tu lógica hermosa de conversión (la dejé casi intacta)
+            if jq -e '. | type == "array"' "$JSON_FILE" > /dev/null; then
+              ALERTS='.[] |.alerts[]?'
+            else
+              ALERTS='.site[]?.alerts[]?'
+            fi
+
+            jq -c "$ALERTS | select(.riskcode | tonumber >= 2) | {
+              ruleId: \"ZAP-\(.pluginid)\",
+              level: (if (.riskcode | tonumber) == 3 then \"error\" else \"warning\" end),
+              message: { text: .alert },
+              locations: [{ physicalLocation: { artifactLocation: { uri: .instances[0].uri }, region: { startLine: 1 } } }]
+            }" "$JSON_FILE" > /tmp/results.json || true
+
+            if [ ! -s /tmp/results.json ]; then jq -n '{version:"2.1.0",$schema:"https://json.schemastore.org/sarif-2.1.0.json",runs:[{"tool":{"driver":{"name":"OWASP ZAP"}},"results":[]}]}' > "$SARIF_FILE"
+            else jq -n --slurpfile r /tmp/results.json '{version:"2.1.0",$schema:"https://json.schemastore.org/sarif-2.1.0.json",runs:[{tool:{driver:{name:"OWASP ZAP"}},results:$r}]}' > "$SARIF_FILE"; fi
+          fi
+
+      - name: Subir resultados a GitHub Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/zap_scan.sarif
 
       # ---------------------------
       # GENERAR SARIF VÁLIDO DESDE ZAP
