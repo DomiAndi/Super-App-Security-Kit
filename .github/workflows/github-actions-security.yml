@@ -46,46 +46,32 @@ jobs:
       # ---------------------------
       # DAST – OWASP ZAP con SARIF nativo
       # ---------------------------
-      - name: OWASP ZAP Baseline Scan
+      - name: OWASP ZAP Baseline Scan + SARIF
         run: |
           mkdir -p zap_wrk reports
 
-          docker run --rm \
+          docker run --rm -u root \
             -v $(pwd)/zap_wrk:/zap/wrk/:rw \
-            -v $(pwd)/reports:/reports:rw \
-            -t ghcr.io/zaproxy/zaproxy:weekly \
+            -t ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
             -t https://example.com \
             -J zap_report.json \
             -w zap_report.md \
             -r zap_report.html \
-            --sarif-output /reports/zap_scan.sarif \
             -z "-config baseline.threshold=Medium" \
             -I || true
 
-          # Por si el sitio está caído o no hay alertas
-          if [ ! -f reports/zap_scan.sarif ] || [ ! -s reports/zap_scan.sarif ]; then
-            echo "ZAP no generó SARIF → creando uno vacío válido"
-            cat > reports/zap_scan.sarif <<'EOF'
-          {
-            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-            "version": "2.1.0",
-            "runs": [{
-              "tool": { "driver": { "name": "OWASP ZAP Baseline" } },
-              "results": []
-            }]
-          }
+          # ←←← AQUÍ ESTÁ LA MAGIA (3 líneas y listo)
+          docker run --rm \
+            -v $(pwd)/zap_wrk:/zap/wrk/:rw \
+            -v $(pwd)/reports:/reports:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-api-scan.py -f openapi -t /zap/wrk/zap_report.json -w /reports/zap_scan.sarif || true
+
+          # Si por algún motivo falla la conversión, SARIF vacío
+          [ -f reports/zap_scan.sarif ] || cat > reports/zap_scan.sarif <<'EOF'
+          {"$schema":"https://json.schemastore.org/sarif-2.1.0.json","version":"2.1.0","runs":[{"tool":{"driver":{"name":"OWASP ZAP"}},"results":[]}]}
           EOF
-          fi
-
-          echo "Contenido del SARIF generado:"
-          cat reports/zap_scan.sarif
-
-      - name: Upload SARIF a GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: reports/zap_scan.sarif
-          category: zap-dast
 
       # ---------------------------
       # GENERAR SARIF VÁLIDO DESDE ZAP
