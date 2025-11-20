@@ -44,28 +44,28 @@ jobs:
           path: semgrep_report.json
 
       # ---------------------------
-      # DAST – OWASP ZAP con SARIF nativo (LA FORMA CORRECTA)
+      # DAST – OWASP ZAP con SARIF nativo
       # ---------------------------
-      - name: OWASP ZAP Baseline Scan (con SARIF nativo)
+      - name: OWASP ZAP Baseline Scan
         run: |
           mkdir -p zap_wrk reports
 
           docker run --rm \
             -v $(pwd)/zap_wrk:/zap/wrk/:rw \
             -v $(pwd)/reports:/reports:rw \
-            -t ghcr.io/zaproxy/zaproxy:stable \
+            -t ghcr.io/zaproxy/zaproxy:weekly \
             zap-baseline.py \
             -t https://example.com \
             -J zap_report.json \
             -w zap_report.md \
             -r zap_report.html \
             --sarif-output /reports/zap_scan.sarif \
-            -z "-config baseline.threshold=Medium -config rules.csrf.ignore=true" \
+            -z "-config baseline.threshold=Medium" \
             -I || true
 
-          # Si por alguna razón no generó SARIF, creamos uno vacío válido
-          if [ ! -f reports/zap_scan.sarif ]; then
-            echo "ZAP no generó SARIF, creando uno vacío..."
+          # Por si el sitio está caído o no hay alertas
+          if [ ! -f reports/zap_scan.sarif ] || [ ! -s reports/zap_scan.sarif ]; then
+            echo "ZAP no generó SARIF → creando uno vacío válido"
             cat > reports/zap_scan.sarif <<'EOF'
           {
             "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
@@ -78,18 +78,8 @@ jobs:
           EOF
           fi
 
-          echo "SARIF generado:"
-          ls -la reports/zap_scan.sarif
-          cat reports/zap_scan.sarif | head -20
-
-      - name: Subir reportes ZAP como artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: dast-zap-reports
-          path: |
-            zap_wrk/
-            reports/
-            zap_report.*
+          echo "Contenido del SARIF generado:"
+          cat reports/zap_scan.sarif
 
       - name: Upload SARIF a GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
