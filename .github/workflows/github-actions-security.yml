@@ -50,7 +50,7 @@ jobs:
         run: |
           mkdir -p zap_wrk
           docker run --rm \
-          --user root \
+            --user root \
             -v $(pwd)/zap_wrk:/zap/wrk/:rw \
             -w /zap/wrk \
             -t ghcr.io/zaproxy/zaproxy:stable \
@@ -80,12 +80,12 @@ jobs:
           path: zap_reports/
 
       # ---------------------------
-      # GENERAR SARIF
+      # GENERAR SARIF DESDE ZAP (CORREGIDO Y SIMPLIFICADO)
       # ---------------------------
       - name: Generar SARIF desde ZAP
         if: always()
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y jq
+          sudo apt-get update -qq && sudo apt-get install -y jq curl python3
 
           JSON_FILE="zap_reports/zap_report.json"
           SARIF_FILE="zap_report.sarif"
@@ -103,56 +103,20 @@ jobs:
           }
           EOF
           else
-            # Extraer alertas (funciona con ambas estructuras de JSON)
-            jq -c '
-              def sanitize: gsub("\\s+"; "_") | ascii_downcase;
-              (.[]?.alerts // .site[].alerts) // empty
-              | .[]
-              | select(.riskcode >= 2)
-              | {
-                  ruleId: (.pluginid | tostring),
-                  level: (if .riskcode == 3 then "error" else "warning" end),
-                  message: { text: .alert },
-                  locations: [{
-                    physicalLocation: {
-                      artifactLocation: {
-                        uri: "web://" + (.name | sanitize) + ".md",
-                        uriBaseId: "web"
-                      },
-                      region: { startLine: 1 }
-                    }
-                  }]
-                }
-            ' "$JSON_FILE" > /tmp/zap_alerts.json
-
-            # Crear SARIF base con originalUriBaseIds
-            cat > "$SARIF_FILE" <<'EOF'
-          {
-            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-            "version": "2.1.0",
-            "runs": [{
-              "tool": { "driver": { "name": "OWASP ZAP", "version": "stable" } },
-              "originalUriBaseIds": {
-                "web": { "uri": "https://example.com/" }
-              },
-              "results": []
-            }]
-          }
-          EOF
-
-            # Insertar los resultados ordenados
-            jq '.runs[0].results = (input | sort_by(.ruleId))' "$SARIF_FILE" /tmp/zap_alerts.json > "$SARIF_FILE.tmp" \
-              && mv "$SARIF_FILE.tmp" "$SARIF_FILE"
-
-            COUNT=$(jq '.runs[0].results | length' "$SARIF_FILE")
-            echo "SARIF DAST-compatible generado con $COUNT hallazgos"
-            ls -la "$SARIF_FILE"
+            curl -sSL https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/sarif-export.py -o /tmp/sarif-export.py
+            python3 /tmp/sarif-export.py "$JSON_FILE" > "$SARIF_FILE"
+            COUNT=$(jq '.runs[0].results | length' "$SARIF_FILE" 2>/dev/null || echo 0)
+            echo "SARIF generado con $COUNT alertas de seguridad"
           fi
+
+          [ -f "$SARIF_FILE" ] || touch "$SARIF_FILE"
+          ls -la "$SARIF_FILE"
+
       # ---------------------------
       # SUBIR SARIF
       # ---------------------------
       - name: Subir SARIF a GitHub Code Scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: zap_report.sarif
