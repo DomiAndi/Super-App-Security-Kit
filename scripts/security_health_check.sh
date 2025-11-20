@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
 # security_health_check.sh
-echo -e "\nSuper App Security Kit - Health Check Rápido"
-echo "Objetivo: $1"
-echo "════════════════════════════════════════════════\n"
 # Uso: ./security_health_check.sh example.com
 # Requisitos: curl, openssl, nmap (opcionales)
 
