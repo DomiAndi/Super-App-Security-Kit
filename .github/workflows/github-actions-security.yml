@@ -90,6 +90,7 @@ jobs:
           JSON_FILE="zap_reports/zap_report.json"
           SARIF_FILE="zap_report.sarif"
 
+          # Si no hay JSON o está vacío → SARIF vacío
           if [ ! -f "$JSON_FILE" ] || [ ! -s "$JSON_FILE" ]; then
             echo "ZAP no generó resultados → SARIF vacío"
             cat > "$SARIF_FILE" <<'EOF'
@@ -103,9 +104,11 @@ jobs:
           }
           EOF
           else
+            # Detectar estructura del JSON (array o objeto)
             FIRST_CHAR=$(head -c 1 "$JSON_FILE")
 
             if [ "$FIRST_CHAR" = "[" ]; then
+              # Nueva estructura (array de sites)
               jq -c '
                 .[]?.alerts[]
                 | select(.riskcode >= 2)
@@ -115,13 +118,14 @@ jobs:
                     message: { text: .alert },
                     locations: [{
                       physicalLocation: {
-                        artifactLocation: { uri: (.instances[0].uri // "https://example.com") },
+                        artifactLocation: { uri: "web://" + (.name | gsub("\\s"; "_") | ascii_downcase) + ".md" },
                         region: { startLine: 1 }
                       }
                     }]
                   }
               ' "$JSON_FILE"
             else
+              # Estructura antigua (.site)
               jq -c '
                 .site[].alerts[]
                 | select(.riskcode >= 2)
@@ -131,7 +135,7 @@ jobs:
                     message: { text: .alert },
                     locations: [{
                       physicalLocation: {
-                        artifactLocation: { uri: (.instances[0].uri // "https://example.com") },
+                        artifactLocation: { uri: "web://" + (.name | gsub("\\s"; "_") | ascii_downcase) + ".md" },
                         region: { startLine: 1 }
                       }
                     }]
@@ -139,22 +143,33 @@ jobs:
               ' "$JSON_FILE"
             fi > /tmp/zap_alerts.json
 
-            jq -n \
-              --slurpfile alerts /tmp/zap_alerts.json \
-              '{
-                "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-                "version": "2.1.0",
-                "runs": [{
-                  "tool": { "driver": { "name": "OWASP ZAP", "version": "stable" } },
-                  "results": $alerts
-                }]
-              }' > "$SARIF_FILE"
+            # Construir SARIF con originalUriBaseIds para esquema "web://" (compatible con DAST)
+            cat > "$SARIF_FILE" <<'EOF'
+          {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [{
+              "tool": { "driver": { "name": "OWASP ZAP", "version": "stable" } },
+              "originalUriBaseIds": {
+                "web": { "uri": "https://example.com/" }
+              },
+              "results": []
+            }]
+          }
+          EOF
+
+            # Añadir los resultados (ahora con URIs relativos que usan "web://")
+            RESULTS=$(jq -s '.[0].runs[0].results = .[1] | .[0]' "$SARIF_FILE" /tmp/zap_alerts.json)
+
+            echo "$RESULTS" > "$SARIF_FILE"
 
             COUNT=$(jq '.runs[0].results | length' "$SARIF_FILE")
-            echo "SARIF generado correctamente con $COUNT hallazgos"
+            echo "SARIF DAST-compatible generado con $COUNT hallazgos (sin error de esquema URI)"
           fi
 
+          # Verificación
           ls -la "$SARIF_FILE"
+          echo "Primer resultado (si hay): $(jq '.[0].runs[0].results[0] // "Ninguno"' /tmp/zap_alerts.json 2>/dev/null || echo "Sin alerts")"
 
       # ---------------------------
       # SUBIR SARIF
