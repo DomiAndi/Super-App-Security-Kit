@@ -80,16 +80,22 @@ jobs:
           path: zap_reports/
 
       # ---------------------------
-      # GENERAR SARIF DESDE ZAP (CORREGIDO Y SIMPLIFICADO)
+      # GENERAR SARIF DESDE ZAP
       # ---------------------------
       - name: Generar SARIF desde ZAP
         if: always()
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y jq curl python3
+          sudo apt-get update -qq && sudo apt-get install -y jq
 
           JSON_FILE="zap_reports/zap_report.json"
           SARIF_FILE="zap_report.sarif"
 
+          # Función sanitize global (fuera del filtro para evitar bugs en jq 1.7)
+          cat > /tmp/sanitize.jq << 'EOF'
+          def sanitize: gsub("\\s+"; "_") | ascii_downcase;
+          EOF
+
+          # Si no hay resultados → SARIF vacío
           if [ ! -f "$JSON_FILE" ] || [ ! -s "$JSON_FILE" ]; then
             echo "ZAP no generó resultados → SARIF vacío"
             cat > "$SARIF_FILE" <<'EOF'
@@ -103,12 +109,63 @@ jobs:
           }
           EOF
           else
-            curl -sSL https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/sarif-export.py -o /tmp/sarif-export.py
-            python3 /tmp/sarif-export.py "$JSON_FILE" > "$SARIF_FILE"
-            COUNT=$(jq '.runs[0].results | length' "$SARIF_FILE" 2>/dev/null || echo 0)
-            echo "SARIF generado con $COUNT alertas de seguridad"
+            # Extraer alertas con sanitize global y sin '+' (usamos interpolación)
+            jq -L /tmp -r '
+              include "sanitize";
+              def sanitize: gsub("\\s+"; "_") | ascii_downcase;
+              (.[]?.alerts // .site[].alerts // empty) as $alerts |
+              $alerts[] |
+              select(.riskcode >= 2) |
+              {
+                ruleId: (.pluginid | tostring),
+                level: (if .riskcode == 3 then "error" else "warning" end),
+                message: { text: "\(.alert): \(.description // "")" },
+                locations: [{
+                  physicalLocation: {
+                    artifactLocation: {
+                      uri: "web://\(.name | sanitize).md",
+                      uriBaseId: "web"
+                    },
+                    region: { startLine: 1 }
+                  }
+                }]
+              }
+            ' "$JSON_FILE" > /tmp/zap_alerts.json
+
+            # Crear SARIF base
+            cat > "$SARIF_FILE" <<'EOF'
+          {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [{
+              "tool": { "driver": { "name": "OWASP ZAP", "version": "stable" } },
+              "originalUriBaseIds": {
+                "web": { "uri": "https://example.com/" }
+              },
+              "results": []
+            }]
+          }
+          EOF
+
+            # Insertar resultados (agrupados por ruleId para evitar duplicados)
+            if [ -s /tmp/zap_alerts.json ]; then
+              jq --slurpfile alerts /tmp/zap_alerts.json \
+                 '.runs[0].results = ($alerts | group_by(.ruleId) | map(.[0]))' \
+                 "$SARIF_FILE" > "$SARIF_FILE.tmp" && mv "$SARIF_FILE.tmp" "$SARIF_FILE"
+            fi
+
+            # Validar JSON y contar
+            if jq empty "$SARIF_FILE" >/dev/null 2>&1; then
+              COUNT=$(jq '.runs[0].results | length' "$SARIF_FILE")
+              echo "✅ SARIF generado correctamente con $COUNT hallazgos (Medium+)"
+            else
+              echo "❌ Error: SARIF no es JSON válido. Contenido:"
+              cat "$SARIF_FILE"
+              exit 1
+            fi
           fi
 
+          # Asegurar que el archivo exista
           [ -f "$SARIF_FILE" ] || touch "$SARIF_FILE"
           ls -la "$SARIF_FILE"
 
@@ -117,6 +174,6 @@ jobs:
       # ---------------------------
       - name: Subir SARIF a GitHub Code Scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: zap_report.sarif
