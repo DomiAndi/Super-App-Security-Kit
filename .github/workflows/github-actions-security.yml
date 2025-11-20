@@ -56,7 +56,6 @@ jobs:
             -t https://example.com \
             -J zap_report.json \
             -w zap_report.md \
-            -r zap_report.html \
             -z "-config baseline.threshold=Medium" \
             -I || true
 
@@ -67,7 +66,7 @@ jobs:
             mv zap_wrk/zap_report.* zap_reports/
           else
             echo "ZAP no generó reportes"
-            touch zap_reports/zap_report.{html,md}
+            touch zap_reports/zap_report.md
             echo "[]" > zap_reports/zap_report.json
           fi
           [ -f zap_wrk/zap.log ] && cp zap_wrk/zap.log zap_reports/ || true
@@ -89,7 +88,6 @@ jobs:
           JSON_FILE="zap_reports/zap_report.json"
           SARIF_FILE="zap_report.sarif"
 
-          # Si no hay JSON o está vacío → SARIF vacío
           if [ ! -f "$JSON_FILE" ] || [ ! -s "$JSON_FILE" ]; then
             echo "ZAP no generó resultados → SARIF vacío"
             cat > "$SARIF_FILE" <<'EOF'
@@ -103,11 +101,9 @@ jobs:
           }
           EOF
           else
-            # Detectar si el JSON es array [] o objeto { "site": [...] }
             FIRST_CHAR=$(head -c 1 "$JSON_FILE")
 
             if [ "$FIRST_CHAR" = "[" ]; then
-              # Nueva estructura (array de sites)
               jq -c '
                 .[]?.alerts[]
                 | select(.riskcode >= 2)
@@ -124,7 +120,6 @@ jobs:
                   }
               ' "$JSON_FILE"
             else
-              # Estructura antigua (objeto con .site)
               jq -c '
                 .site[].alerts[]
                 | select(.riskcode >= 2)
@@ -142,7 +137,6 @@ jobs:
               ' "$JSON_FILE"
             fi > /tmp/zap_alerts.json
 
-            # Construir SARIF final
             jq -n \
               --slurpfile alerts /tmp/zap_alerts.json \
               '{
