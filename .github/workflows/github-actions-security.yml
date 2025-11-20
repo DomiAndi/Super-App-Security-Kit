@@ -19,7 +19,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Permisos a scripts
+      - name: Dar permisos a scripts
         run: chmod +x ./scripts/*.sh
 
       # ---------------------------
@@ -44,7 +44,7 @@ jobs:
           path: semgrep_report.json
 
       # ---------------------------
-      # ZAP SCAN (DAST) – VERSIÓN MANUAL 100% ESTABLE
+      # ZAP SCAN (DAST)
       # ---------------------------
       - name: OWASP ZAP Baseline Scan (Docker)
         run: |
@@ -64,17 +64,14 @@ jobs:
         run: |
           mkdir -p zap_reports
 
-          # Mover reportes generados (están dentro de zap_wrk)
           if compgen -G "zap_wrk/zap_report.*" > /dev/null; then
-            mv zap_wrk/zap_report.* zap_reports/ 2>/dev/null || true
+            mv zap_wrk/zap_report.* zap_reports/
           else
-            echo "ZAP no generó reportes (sitio caído o bloqueado)"
-            touch zap_reports/zap_report.html
-            touch zap_reports/zap_report.md
+            echo "ZAP no generó reportes (posiblemente el sitio está caído o bloqueado)"
+            touch zap_reports/zap_report.{html,md}
             echo "[]" > zap_reports/zap_report.json
           fi
 
-          # Copiar log si existe
           [ -f zap_wrk/zap.log ] && cp zap_wrk/zap.log zap_reports/ || true
 
       - name: Subir reportes ZAP
@@ -84,7 +81,7 @@ jobs:
           path: zap_reports/
 
       # ---------------------------
-      # GENERAR SARIF
+      # GENERAR SARIF DESDE ZAP
       # ---------------------------
       - name: Generar SARIF desde ZAP
         if: always()
@@ -92,22 +89,24 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y jq
 
           JSON_FILE="zap_reports/zap_report.json"
+          SARIF_FILE="zap_report.sarif"
 
           if [ ! -f "$JSON_FILE" ] || [ ! -s "$JSON_FILE" ]; then
-            echo "No hay resultados ZAP → SARIF vacío"
-            cat > zap_report.sarif << EOF
+            echo "ZAP no generó resultados → creando SARIF vacío"
+            cat > "$SARIF_FILE" <<'EOF'
           {
-            "\$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
             "version": "2.1.0",
             "runs": [{
-              "tool": { "driver": { "name": "OWASP ZAP" } },
+              "tool": { "driver": { "name": "OWASP ZAP", "version": "stable" } },
               "results": []
             }]
           }
           EOF
           else
-            alerts=$(jq -c '[
-              .site[].alerts[]?
+            # Extraemos los alerts en un archivo temporal (evita problemas de quoting y //)
+            jq -c '
+              [.site[].alerts[]?
               | select(.riskcode >= 2)
               | {
                   ruleId: (.pluginid | tostring),
@@ -115,25 +114,36 @@ jobs:
                   message: { text: .alert },
                   locations: [{
                     physicalLocation: {
-                      artifactLocation: { uri: .instances[0].uri // "unknown" },
+                      artifactLocation: { uri: (.instances[0].uri // "https://example.com") },
                       region: { startLine: 1 }
                     }
                   }]
                 }
-            ]' "$JSON_FILE")
+              ]' "$JSON_FILE" > /tmp/zap_alerts.json
 
-            jq -n --argjson alerts "$alerts" '{
-              "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-              "version": "2.1.0",
-              "runs": [{
-                "tool": { "driver": { "name": "OWASP ZAP" } },
-                "results": $alerts
-              }]
-            }' > zap_report.sarif
+            # Construimos el SARIF final
+            jq -n \
+              --slurpfile alerts /tmp/zap_alerts.json \
+              '{
+                "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+                "version": "2.1.0",
+                "runs": [{
+                  "tool": { "driver": { "name": "OWASP ZAP", "version": "stable" } },
+                  "results": $alerts[0]
+                }]
+              }' > "$SARIF_FILE"
+
+            echo "SARIF generado con $(jq '.runs[0].results | length' "$SARIF_FILE") hallazgos"
           fi
 
+          # Verificación final
+          ls -la "$SARIF_FILE"
+
+      # ---------------------------
+      # SUBIR SARIF A CODE SCANNING
+      # ---------------------------
       - name: Subir SARIF a GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v3
         if: always()
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: zap_report.sarif
