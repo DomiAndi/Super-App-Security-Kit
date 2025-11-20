@@ -1,0 +1,7 @@
+*.html
+*.json
+*.log
+zap_report.*
+semgrep_report.json
+zap_reports/
+zap_wrk/

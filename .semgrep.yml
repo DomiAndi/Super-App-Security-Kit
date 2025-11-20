@@ -1,0 +1,8 @@
+rules:
+  - id: semgrep-owasp-top10
+    patterns:
+      - pattern-either:
+          - pattern: $X == $X # dummy para evitar vacío
+    message: "OWASP top ten ruleset (placeholder) - prefer usar 'p/owasp-top-ten' en --config si quieres rulesets públicos"
+    severity: INFO
+# Puedes referenciar directamente packs públicos en el comando con --config "p/owasp-top-ten"
