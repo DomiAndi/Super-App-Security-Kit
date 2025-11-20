@@ -52,7 +52,7 @@ jobs:
         uses: zaproxy/action-baseline@v0.13.0
         with:
           target: https://example.com
-          artifact_name: zapresults
+          artifact_name: zap-scan
           fail_action: false
           allow_issue_writing: true
           cmd_options: >-
@@ -69,9 +69,10 @@ jobs:
           mkdir -p zapresults
 
           # Mover archivos generados por ZAP si existen
-          [ -f report_html.html ] && mv report_html.html zap_reports/
-          [ -f report_md.md ] && mv report_md.md zap_reports/
-          [ -f report_json.json ] && mv report_json.json zap_reports/
+          [ -f zap_report.html ] && mv zap_report.html zap_reports/
+          [ -f zap_report.md ] && mv zap_report.md zap_reports/
+          [ -f zap_report.json ] && mv zap_report.json zap_reports/
+          [ -f zap_scan.log ] && mv zap_scan.log zapscan/
 
       - name: Subir reportes ZAP
         uses: actions/upload-artifact@v4
