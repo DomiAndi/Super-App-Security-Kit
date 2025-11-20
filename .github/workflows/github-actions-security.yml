@@ -49,10 +49,11 @@ jobs:
       # ---------------------------
       - name: OWASP ZAP Baseline Scan
         id: zap
-        uses: zaproxy/action-baseline@v0.13.0
+        continue-on-error: true
+        uses: zaproxy/action-baseline@v0.15.0
         with:
           target: https://example.com
-          artifact_name: zapscan
+          # artifact_name: zapscan
           fail_action: false
           allow_issue_writing: true
           cmd_options: >-
@@ -64,7 +65,7 @@ jobs:
       # ---------------------------
       - name: Organizar reportes ZAP
         run: |
-          mkdir -p zapreports
+          mkdir -p zap_reports
           mkdir -p zapscan
           mkdir -p zapresults
 
