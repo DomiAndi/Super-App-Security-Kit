@@ -118,8 +118,6 @@ jobs:
               end;
 
             (.site // .) as $root |
-            
-            
             if ($root | type == "array") then $root[] else $root end |
             
             .alerts[]? // .site[].alerts[]? // empty |
@@ -131,16 +129,16 @@ jobs:
               locations: [{
                 physicalLocation: {
                   artifactLocation: { 
-                    uri: fix_url,
-                    uriBaseId: "SRCROOT"
-                  },
-                  region: { startLine: 1 }
+                    uri: fix_url
+                    # Removido: uriBaseId: "SRCROOT"
+                  }
+                  # Removido: region: { startLine: 1 }
                 }
               }]
             }
           ' "$JSON_FILE" > /tmp/zap_alerts.json
 
-          # Crear SARIF con originalUriBaseIds para que GitHub muestre URLs bonitas
+          # Crear SARIF
           jq -n \
             --slurpfile alerts /tmp/zap_alerts.json \
             '{
@@ -148,9 +146,7 @@ jobs:
               "version": "2.1.0",
               "runs": [{
                 "tool": { "driver": { "name": "OWASP ZAP", "version": "stable" } },
-                "originalUriBaseIds": {
-                  "SRCROOT": { "uri": "https://example.com/" }
-                },
+                # Removido: originalUriBaseIds
                 "results": $alerts
               }]
             }' > "$SARIF_FILE"
