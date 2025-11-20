@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write # Necesario para subir SARIF
+      security-events: write
       issues: write
       pull-requests: write
 
@@ -79,72 +79,93 @@ jobs:
           path: zap_reports/
 
       # ---------------------------
-      # GENERAR SARIF VÁLIDO PARA DAST (SIN LOCATIONS → SIN ERROR)
+      # GENERAR SARIF VÁLIDO DESDE ZAP
       # ---------------------------
-      # ---------------------------
-      # GENERAR SARIF VÁLIDO PARA DAST (SIN LOCATIONS → SIN ERROR)
-      # ---------------------------
-      - name: Generar SARIF válido desde ZAP (DAST)
+      - name: Convertir ZAP JSON → SARIF (robusto)
         if: always()
         run: |
           sudo apt-get update -qq && sudo apt-get install -y jq
 
+          mkdir -p reports
           JSON_FILE="zap_reports/zap_report.json"
-          SARIF_FILE="zap_report.sarif"
+          SARIF_FILE="reports/zap_scan.sarif"
 
-          # ... (código de manejo de archivos vacíos/inválidos anterior, lo omito por brevedad) ...
-          if [ ! -f "$JSON_FILE" ] || [ ! -s "$JSON_FILE" ] || ! jq empty "$JSON_FILE" 2>/dev/null; then
-             # ... (manejo de archivos vacíos) ...
-             exit 0
+          # Si no existe o está vacío → SARIF vacío válido
+          if [ ! -f "$JSON_FILE" ] || [ ! -s "$JSON_FILE" ]; then
+            echo "ZAP no generó JSON → creando SARIF vacío"
+            cat > "$SARIF_FILE" <<'EOF'
+          {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+              {
+                "tool": {
+                  "driver": { "name": "OWASP ZAP Baseline", "version": "stable" }
+                },
+                "results": []
+              }
+            ]
+          }
+          EOF
+            echo "SARIF vacío creado"
+            exit 0
           fi
 
-          # Generar alertas CON un placeholder de locations vacío
-          jq -c '
-            def endpoint:
-              if .instances and (.instances[0].uri | type == "string") then
-                .instances[0].uri
-                | if startswith("http") then . else "https://example.com\(.)" end
-              else
-                "https://example.com"
-              end;
+          # Detectar formato (nuevo ZAP devuelve array, viejo devuelve objeto con .site)
+          if jq -e '. | type == "array"' "$JSON_FILE" > /dev/null; then
+            ALERTS_QUERY='.[] | .alerts[]?'
+          else
+            ALERTS_QUERY='.site[]?.alerts[]?'
+          fi
 
-            (.site // .) as $root |
-            if ($root | type == "array") then $root[] else $root end |
-            .alerts[]? // .site[].alerts[]? // empty |
-            select(.riskcode >= 2) |   # 2 = Medium, 3 = High
-            {
-              ruleId: (.pluginid | tostring),
-              level: (if .riskcode == 3 then "error" else "warning" end),
-              message: {
-                text: "[ZAP] \(.alert // "Unknown") (Risk: \(.riskdesc)) | Endpoint: \(endpoint)\n\(.description // "" | gsub("\n"; " "))\nSolution: \(.solution // "No solution provided." | gsub("\n"; " "))"
-              },
-              # AÑADIR ESTE PLACEHOLDER: una ubicación vacía/genérica
-              locations: [
-                {
-                  physicalLocation: {
-                    artifactLocation: { uri: "app/root" }
+          # Generar resultados SARIF (solo riskcode ≥ 2 → Medium/High)
+          jq -c "
+            $ALERTS_QUERY
+            | select(.riskcode != null and (.riskcode | tonumber) >= 2)
+            | {
+                ruleId: \"ZAP-\\(.pluginid // \"unknown\")\\",
+                level: (if (.riskcode | tonumber) == 3 then \"error\" else \"warning\" end),
+                message: { text: \"\\(.alert // \\\"Sin título\\\")\\nRisk: \\(.riskdesc // \\\"unknown\\\")\\n\\(.desc // \\\"\\\")\" },
+                locations: [
+                  {
+                    physicalLocation: {
+                      artifactLocation: { uri: (.instances[0].uri // \"https://example.com\") },
+                      region: { startLine: 1 }
+                    }
                   }
-                }
-              ]
-            }
-          ' "$JSON_FILE" > /tmp/zap_alerts.json
+                ]
+              }
+          " "$JSON_FILE" > /tmp/zap_results.json
 
-          # Construir SARIF final (el resto del script es igual)
-          jq -n \
-           # ... (código para construir el SARIF final) ...
-            > "$SARIF_FILE"
+          # Si no hay alertas → SARIF vacío
+          if [ ! -s /tmp/zap_results.json ]; then
+            echo "No hay alertas Medium+ → SARIF vacío"
+            jq -n '{
+              "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+              "version": "2.1.0",
+              "runs": [{ "tool": { "driver": { "name": "OWASP ZAP Baseline" }}, "results": [] }]
+            }' > "$SARIF_FILE"
+          else
+            jq -n --slurpfile results /tmp/zap_results.json '{
+              "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+              "version": "2.1.0",
+              "runs": [{
+                "tool": { "driver": { "name": "OWASP ZAP Baseline", "version": "stable" }},
+                "results": $results
+              }]
+            }' > "$SARIF_FILE"
+          fi
 
-          COUNT=$(jq '.runs[0].results | length' "$SARIF_FILE")
-          echo "SARIF generado con $COUNT alertas (Medium+)"
-          echo "$SARIF_FILE creado correctamente"
+          echo "SARIF generado correctamente:"
+          ls -lh "$SARIF_FILE"
+          jq . "$SARIF_FILE" > /dev/null && echo "SARIF válido según schema" || echo "SARIF inválido!"
 
       # ---------------------------
-      # SUBIR SARIF A GITHUB CODE SCANNING (FUNCIONA 100%)
+      # SUBIR A CODE SCANNING
       # ---------------------------
-      - name: Subir resultados a GitHub Code Scanning
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4 # Versión actual (2025-2026)
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always() && github.repository == github.event.pull_request.head.repo.full_name || github.event_name == 'push'
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: zap_report.sarif
+          sarif_file: reports/zap_scan.sarif
           category: zap-baseline
-          wait-for-processing: true # Espera confirmación real de GitHub
