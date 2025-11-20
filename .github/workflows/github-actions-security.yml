@@ -32,8 +32,7 @@ jobs:
       # SAST – SEMGREP
       # ---------------------------
       - name: Instalar Semgrep
-        run: |
-          pipx install semgrep || echo "Semgrep ya instalado"
+        run: pipx install semgrep || echo "Semgrep ya instalado"
 
       - name: SAST Scan
         run: ./scripts/sast_scan.sh
@@ -45,78 +44,96 @@ jobs:
           path: semgrep_report.json
 
       # ---------------------------
-      # ZAP SCAN (DAST)
+      # ZAP SCAN (DAST) – VERSIÓN MANUAL 100% ESTABLE
       # ---------------------------
-      - name: OWASP ZAP Baseline Scan
-        id: zap
-        continue-on-error: true
-        uses: zaproxy/action-baseline@v0.15.0
-        with:
-          target: https://example.com
-          fail_action: false
-          allow_issue_writing: true
-          cmd_options: >-
-            -w /zap/tmp
-            -z "-config baseline.threshold=Medium"
-            -I
+      - name: OWASP ZAP Baseline Scan (Docker)
+        run: |
+          mkdir -p zap_wrk
+          docker run --rm \
+            -v $(pwd)/zap_wrk:/zap/wrk/:rw \
+            -t ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t https://example.com \
+            -J zap_report.json \
+            -w zap_report.md \
+            -r zap_report.html \
+            -z "-config baseline.threshold=Medium" \
+            -I || true
 
-      # ---------------------------
-      # ORGANIZAR REPORTES ZAP
-      # ---------------------------
       - name: Organizar reportes ZAP
         run: |
           mkdir -p zap_reports
 
-          # Copiar reportes si existen
-          [ -f report_html.html ] && mv report_html.html zap_reports/
-          [ -f report_md.md ] && mv report_md.md zap_reports/
-          [ -f report_json.json ] && mv report_json.json zap_reports/
-          [ -f zap_scan.log ] && mv zap_scan.log zap_reports/
+          # Mover reportes generados (están dentro de zap_wrk)
+          if compgen -G "zap_wrk/zap_report.*" > /dev/null; then
+            mv zap_wrk/zap_report.* zap_reports/ 2>/dev/null || true
+          else
+            echo "ZAP no generó reportes (sitio caído o bloqueado)"
+            touch zap_reports/zap_report.html
+            touch zap_reports/zap_report.md
+            echo "[]" > zap_reports/zap_report.json
+          fi
+
+          # Copiar log si existe
+          [ -f zap_wrk/zap.log ] && cp zap_wrk/zap.log zap_reports/ || true
 
       - name: Subir reportes ZAP
         uses: actions/upload-artifact@v4
         with:
           name: zap-reports
-          path: zap_reports
+          path: zap_reports/
 
       # ---------------------------
       # GENERAR SARIF
       # ---------------------------
-      - name: Generar SARIF seguro
+      - name: Generar SARIF desde ZAP
         if: always()
         run: |
           sudo apt-get update -qq && sudo apt-get install -y jq
 
-          # Si ZAP no generó JSON, crear SARIF vacío
-          if [ ! -f report_json.json ]; then
-            echo "Reporte JSON no encontrado. Generando SARIF vacío."
-            echo '{
-              "version": "2.1.0",
-              "runs": [{
-                "tool": { "driver": { "name": "OWASP ZAP" } },
-                "results": []
-              }]
-            }' > zap_report.sarif
-            exit 0
-          fi
+          JSON_FILE="zap_reports/zap_report.json"
 
-          alerts=$(jq -c '[.site[]? | .alerts[]? | select(.riskcode >= 2) | {
-            ruleId: .pluginId,
-            message: { text: (.name // "Unknown") },
-            level: (if .riskcode == 3 then "error" else "warning" end),
-            locations: [{ physicalLocation: { artifactLocation: { uri: (.url // "") } } }]
-          }]' report_json.json || echo "[]")
-
-          jq -n --argjson alerts "$alerts" '{
+          if [ ! -f "$JSON_FILE" ] || [ ! -s "$JSON_FILE" ]; then
+            echo "No hay resultados ZAP → SARIF vacío"
+            cat > zap_report.sarif << EOF
+          {
+            "\$schema": "https://json.schemastore.org/sarif-2.1.0.json",
             "version": "2.1.0",
             "runs": [{
               "tool": { "driver": { "name": "OWASP ZAP" } },
-              "results": $alerts
+              "results": []
             }]
-          }' > zap_report.sarif
+          }
+          EOF
+          else
+            alerts=$(jq -c '[
+              .site[].alerts[]?
+              | select(.riskcode >= 2)
+              | {
+                  ruleId: (.pluginid | tostring),
+                  level: (if .riskcode == 3 then "error" else "warning" end),
+                  message: { text: .alert },
+                  locations: [{
+                    physicalLocation: {
+                      artifactLocation: { uri: .instances[0].uri // "unknown" },
+                      region: { startLine: 1 }
+                    }
+                  }]
+                }
+            ]' "$JSON_FILE")
+
+            jq -n --argjson alerts "$alerts" '{
+              "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+              "version": "2.1.0",
+              "runs": [{
+                "tool": { "driver": { "name": "OWASP ZAP" } },
+                "results": $alerts
+              }]
+            }' > zap_report.sarif
+          fi
 
       - name: Subir SARIF a GitHub Code Scanning
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: zap_report.sarif
