@@ -51,6 +51,7 @@ jobs:
           mkdir -p zap_wrk
           docker run --rm \
             -v $(pwd)/zap_wrk:/zap/wrk/:rw \
+            -w /zap/wrk \
             -t ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
             -t https://example.com \
