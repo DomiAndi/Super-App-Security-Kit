@@ -14,7 +14,7 @@ El **Super App Security Kit** es un conjunto integral de herramientas y guías d
 Este kit proporciona:
 
 - 📄 Plantillas de políticas de seguridad (*pendiente*)  
-- ✅ Checklist de configuración segura para infraestructura y APIs (*pendiente*)  
+- ✅ Checklist de configuración segura para infraestructura y APIs  
 - 🛠️ Scripts de pruebas básicas de vulnerabilidades (OWASP ZAP, SAST)  
 - 📚 Guías de concientización sobre amenazas como *phishing* e ingeniería social (*pendiente*)  
 
