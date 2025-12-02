@@ -44,6 +44,12 @@ jobs:
           path: semgrep_report.json
 
       # ---------------------------
+      # SECRET SCAN – Gitleaks
+      # ---------------------------
+      - name: Secret Scan con Gitleaks
+        run: ./scripts/secret_scan.sh
+
+      # ---------------------------
       # DAST – OWASP ZAP con SARIF nativo
       # ---------------------------
       - name: OWASP ZAP Baseline Scan + SARIF
