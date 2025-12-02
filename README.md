@@ -13,10 +13,10 @@ El **Super App Security Kit** es un conjunto integral de herramientas y guías d
 
 Este kit proporciona:
 
-- 📄 Plantillas de políticas de seguridad (*pendiente*)  
+- 📄 Plantillas de políticas de seguridad  
 - ✅ Checklist de configuración segura para infraestructura y APIs  
 - 🛠️ Scripts de pruebas básicas de vulnerabilidades (OWASP ZAP, SAST)  
-- 📚 Guías de concientización sobre amenazas como *phishing* e ingeniería social (*pendiente*)  
+- 📚 Guías de concientización sobre amenazas como *phishing* e ingeniería social  
 
 ---
 
@@ -38,15 +38,15 @@ El sector fintech se ha convertido en un **objetivo frecuente de ataques** debid
 
 ### 🔑 Must-have
 
-- 🛠️ Guía paso a paso para configurar **autenticación multifactor** y **cifrado de datos** (*pendiente*)  
-- 🔒 Plantillas de políticas de **contraseñas** y **gestión de credenciales** (*pendiente*)  
+- 🛠️ Guía paso a paso para configurar **autenticación multifactor** y **cifrado de datos** 
+- 🔒 Plantillas de políticas de **contraseñas** y **gestión de credenciales** 
 - ⚡ **Scripts de escaneo automático** de vulnerabilidades (OWASP ZAP, SAST)  
 
 ### ✨ Nice-to-have
 
-- 🔄 Ejemplos de flujos de **remediación de incidentes menores** (*pendiente*)  
+- 🔄 Ejemplos de flujos de **remediación de incidentes menores** 
 - 🤖 Integración con **pipelines de CI/CD** para análisis de seguridad automatizado  
-- 📖 Glosario de términos de cumplimiento (**GDPR, PCI DSS**) (*pendiente*)  
+- 📖 Glosario de términos de cumplimiento (**GDPR, PCI DSS**)  
 
 ---
 
