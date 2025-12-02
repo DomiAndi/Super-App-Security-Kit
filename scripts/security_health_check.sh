@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # security_health_check.sh
+# Chequeo rápido de seguridad para un dominio:
+# - Obtiene cabeceras HTTP
+# - Revisa certificado TLS con openssl
+# - Escanea puertos comunes (22/80/443/8080) si hay nmap
+# - Detecta presencia de HSTS y CSP
 # Uso: ./security_health_check.sh example.com
-# Requisitos: curl, openssl, nmap (opcionales)
 
 
 set -euo pipefail

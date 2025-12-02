@@ -5,3 +5,4 @@ zap_report.*
 semgrep_report.json
 zap_reports/
 zap_wrk/
+scripts/gitleaks

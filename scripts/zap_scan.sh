@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Ejecuta un análisis OWASP ZAP (baseline scan) usando Docker.
+# - Verifica que Docker esté instalado
+# - Lanza el contenedor oficial de OWASP ZAP
+# - Genera un reporte HTML del escaneo
+# Uso: ./zap_scan.sh https://objetivo.com [reporte.html]
 
 set -euo pipefail
 

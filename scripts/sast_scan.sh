@@ -1,4 +1,9 @@
 #!/bin/bash
+# SAST Scan – Semgrep
+
+# Realiza un análisis de seguridad estático sobre el código fuente usando Semgrep.
+# Detecta vulnerabilidades, malas prácticas y configuraciones inseguras.
+# Genera el reporte: semgrep_report.json
 
 DIRECTORIO_ESCANEO="."
 OUTPUT_FILE="semgrep_report.json"

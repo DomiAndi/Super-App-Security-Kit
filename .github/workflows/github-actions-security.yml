@@ -50,6 +50,12 @@ jobs:
         run: ./scripts/secret_scan.sh
 
       # ---------------------------
+      # FILE PERMISSIONS CHECK (NUEVO)
+      # ---------------------------
+      - name: Chequeo de permisos inseguros
+        run: ./scripts/file_permissions_check.sh
+
+      # ---------------------------
       # DAST – OWASP ZAP con SARIF nativo
       # ---------------------------
       - name: OWASP ZAP Baseline Scan + SARIF

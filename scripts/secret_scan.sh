@@ -1,9 +1,11 @@
 #!/bin/bash
-# scripts/secret_scan.sh
+# Secret Scan – Gitleaks
+# Escanea el repositorio para detectar secretos expuestos (API keys, tokens, credenciales).
+# Genera un reporte SARIF en: reports/gitleaks.sarif
 
 echo "[+] Escaneando secretos con Gitleaks..."
 
-# Crear carpeta de reportes (si no existe)
+# Crea carpeta de reportes (si no existe)
 mkdir -p reports
 
 # Descargar Gitleaks
