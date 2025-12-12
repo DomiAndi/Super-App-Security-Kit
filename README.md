@@ -57,3 +57,29 @@ El sector fintech se ha convertido en un **objetivo frecuente de ataques** debid
 ```bash
 git clone https://github.com/tuusuario/super-app-security-kit.git
 cd super-app-security-kit
+```
+
+
+## 👥 Equipo del proyecto
+
+### 🔧 Desarrollo técnico y automatización
+
+| Nombre | Rol | Responsabilidades | Perfil |
+|------|----|------------------|--------|
+| **Leslie Jimenez** | DevSecOps / Security Automation Trainee | Desarrollo de scripts de seguridad (SAST, Secret Scan), integración de controles en pipelines CI/CD, automatización de escaneos | [GitHub](https://github.com/DomiAndi) |
+
+---
+
+### 📚 Documentación y políticas de seguridad
+
+| Nombre | Rol | Responsabilidades | Perfil |
+|------|----|------------------|--------|
+| Nombre Apellido | Security Documentation Trainee | Documentación de políticas de contraseñas y gestión de credenciales | [Github](https://linkedin.com/in/usuario) |
+| Nombre Apellido | Security Documentation Trainee | Guías de concientización sobre phishing e ingeniería social | [GitHub](https://linkedin.com/in/usuario) |
+| Luz Carabali | Security Documentation Trainee | Checklists de configuración segura para infraestructura y APIs | [GitHub](https://github.com/usuario) |
+| Nombre Apellido | Security Documentation Trainee | Documentación de cumplimiento y mejores prácticas (OWASP, GDPR, PCI DSS) | [GitHub](https://github.com/usuario) |
+
+---
+
+
+
