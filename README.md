@@ -74,10 +74,10 @@ cd super-app-security-kit
 
 | Nombre | Rol | Responsabilidades | Perfil |
 |------|----|------------------|--------|
-| Luz Carabali mulato | Security Documentation Trainee | Check list y Plantilla de políticas | [Github](https://linkedin.com/in/Luzangelacarabali) |
-| Nombre Apellido | Security Documentation Trainee |  | [GitHub](https://linkedin.com/in/usuario) |
+| Luz Carabali mulato | Security Documentation Trainee | Check list y Plantilla de políticas | [Github](https://github.com/luzangelacarabali) |
+| Nombre Apellido | Security Documentation Trainee |  | [GitHub](https://github.com/usuario)  |
 | Nombre Apellido | Security Documentation Trainee |  | [GitHub](https://github.com/usuario) |
-| Nombre Apellido | Security Documentation Trainee | ) | [GitHub](https://github.com/usuario) |
+| Nombre Apellido | Security Documentation Trainee |  | [GitHub](https://github.com/usuario) |
 
 ---
 
