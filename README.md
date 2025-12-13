@@ -74,10 +74,10 @@ cd super-app-security-kit
 
 | Nombre | Rol | Responsabilidades | Perfil |
 |------|----|------------------|--------|
-| Nombre Apellido | Security Documentation Trainee | Documentación de políticas de contraseñas y gestión de credenciales | [Github](https://linkedin.com/in/usuario) |
-| Nombre Apellido | Security Documentation Trainee | Guías de concientización sobre phishing e ingeniería social | [GitHub](https://linkedin.com/in/usuario) |
-| Nombre Apellido | Security Documentation Trainee | Checklists de configuración segura para infraestructura y APIs | [GitHub](https://github.com/usuario) |
-| Nombre Apellido | Security Documentation Trainee | Documentación de cumplimiento y mejores prácticas (OWASP, GDPR, PCI DSS) | [GitHub](https://github.com/usuario) |
+| Luz Carabali mulato | Security Documentation Trainee | Check list y Plantilla de políticas | [Github](https://linkedin.com/in/Luzangelacarabali) |
+| Nombre Apellido | Security Documentation Trainee |  | [GitHub](https://linkedin.com/in/usuario) |
+| Nombre Apellido | Security Documentation Trainee |  | [GitHub](https://github.com/usuario) |
+| Nombre Apellido | Security Documentation Trainee | ) | [GitHub](https://github.com/usuario) |
 
 ---
 
